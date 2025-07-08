@@ -15,11 +15,14 @@ from pydantic import Field
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
 class ChatLMStudio(ChatOpenAI):
     """Chat model that uses LMStudio's OpenAI-compatible API."""
-    
-    format: Optional[str] = Field(default=None, description="Format for the response (e.g., 'json')")
-    
+
+    format: Optional[str] = Field(
+        default=None, description="Format for the response (e.g., 'json')"
+    )
+
     def __init__(
         self,
         base_url: str = "http://localhost:1234/v1",
@@ -30,7 +33,7 @@ class ChatLMStudio(ChatOpenAI):
         **kwargs: Any,
     ):
         """Initialize the ChatLMStudio.
-        
+
         Args:
             base_url: Base URL for LMStudio's OpenAI-compatible API
             model: Model name to use
@@ -48,7 +51,7 @@ class ChatLMStudio(ChatOpenAI):
             **kwargs,
         )
         self.format = format
-        
+
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -56,28 +59,27 @@ class ChatLMStudio(ChatOpenAI):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        
         """Generate a chat response using LMStudio's OpenAI-compatible API."""
-        
+
         if self.format == "json":
             # Set response_format for JSON mode
             kwargs["response_format"] = {"type": "json_object"}
             logger.info(f"Using response_format={kwargs['response_format']}")
-        
+
         # Call the parent class's _generate method
         result = super()._generate(messages, stop, run_manager, **kwargs)
-        
+
         # If JSON format is requested, try to clean up the response
         if self.format == "json" and result.generations:
             try:
                 # Get the raw text
                 raw_text = result.generations[0][0].text
                 logger.info(f"Raw model response: {raw_text}")
-                
+
                 # Try to find JSON in the response
-                json_start = raw_text.find('{')
-                json_end = raw_text.rfind('}') + 1
-                
+                json_start = raw_text.find("{")
+                json_end = raw_text.rfind("}") + 1
+
                 if json_start >= 0 and json_end > json_start:
                     # Extract just the JSON part
                     json_text = raw_text[json_start:json_end]
@@ -92,5 +94,5 @@ class ChatLMStudio(ChatOpenAI):
                 logger.error(f"Error processing JSON response: {str(e)}")
                 # If any error occurs during cleanup, just use the original response
                 pass
-                
-        return result 
+
+        return result

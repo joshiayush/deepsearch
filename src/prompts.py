@@ -1,10 +1,12 @@
 from datetime import datetime
 
+
 # Get current date in a readable format
 def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
-query_writer_instructions="""Your goal is to generate a targeted web search query.
+
+query_writer_instructions = """Your goal is to generate a targeted web search query.
 
 <CONTEXT>
 Current date: {current_date}
@@ -31,7 +33,7 @@ Example output:
 
 Provide your response in JSON format:"""
 
-summarizer_instructions="""
+summarizer_instructions = """
 <GOAL>
 Generate a high-quality summary of the provided context.
 </GOAL>
