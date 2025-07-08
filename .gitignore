@@ -1,0 +1,13 @@
+# Environment variables
+.env
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.eggs/
+*.venv/
+*.virtualenv/
