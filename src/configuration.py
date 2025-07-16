@@ -21,15 +21,10 @@ class Configuration(BaseModel):
         title="Research Depth",
         description="Number of research iterations to perform",
     )
-    local_llm: str = Field(
-        default="llama3.2",
-        title="LLM Model Name",
-        description="Name of the LLM model to use",
-    )
-    llm_provider: Literal["ollama", "lmstudio"] = Field(
-        default="ollama",
-        title="LLM Provider",
-        description="Provider for the LLM (Ollama or LMStudio)",
+    llm_model: Literal["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"] = Field(
+        default="gpt-4o-mini",
+        title="LLM Model",
+        description="Model to use for LLM tasks",
     )
     search_api: Literal["perplexity", "tavily", "duckduckgo", "searxng"] = Field(
         default="duckduckgo", title="Search API", description="Web search API to use"
@@ -38,11 +33,6 @@ class Configuration(BaseModel):
         default=True,
         title="Fetch Full Page",
         description="Include the full page content in the search results",
-    )
-    ollama_base_url: str = Field(
-        default="http://localhost:11434/",
-        title="Ollama Base URL",
-        description="Base URL for Ollama API",
     )
     strip_thinking_tokens: bool = Field(
         default=True,
