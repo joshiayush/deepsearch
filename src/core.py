@@ -128,3 +128,53 @@ def web_research(state: SummaryState, config: Configuration) -> Dict[str, str]:
         "research_loop_count": state.research_loop_count + 1,
         "web_research_results": [search_str],
     }
+
+
+def summarize_sources(state: SummaryState, config: Configuration) -> Dict[str, str]:
+    """Summarizes the web research results.
+
+    Uses an LLM to create or update a running summary based on the newest web research
+    results, integrating them with any existing summary.
+
+    Args:
+        state: Current graph state containing research topic, running summary, and web
+             research results.
+        config: Configuration for the runnable, including LLM provider settings.
+
+    Returns:
+        Dictionary with state update, including running_summary key containing the
+        updated summary.
+    """
+    existing_summary = state.running_summary
+    most_recent_web_research = state.web_research_results[-1]
+
+    if existing_summary:
+        human_message_content = (
+            f"<Existing Summary>\n{existing_summary}\n<Existing Summary>\n\n"
+            f"<New Context>\n{most_recent_web_research}\n<New Context>"
+            f"Update the Existing Summary with the New Context on this topic:\n"
+            f"<User Input>\n{state.research_topic}\n<User Input>\n\n"
+        )
+    else:
+        human_message_content = (
+            f"<Context>\n{most_recent_web_research}\n<Context>"
+            f"Create a Summary using the Context on this topic:\n"
+            f"<User Input>\n{state.research_topic}\n<User Input>\n\n"
+        )
+
+    llm = ChatOpenAI(
+        model=config.llm_model,
+        temperature=0.0,
+    )
+
+    result = llm.invoke(
+        [
+            SystemMessage(content=summarizer_instructions),
+            HumanMessage(content=human_message_content),
+        ]
+    )
+    running_summary = result.content
+    if config.strip_thinking_tokens:
+        running_summary = strip_thinking_tokens(running_summary)
+
+    return {"running_summary": running_summary}
