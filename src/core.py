@@ -178,3 +178,53 @@ def summarize_sources(state: SummaryState, config: Configuration) -> Dict[str, s
         running_summary = strip_thinking_tokens(running_summary)
 
     return {"running_summary": running_summary}
+
+
+def reflect_on_summary(state: SummaryState, config: Configuration) -> Dict[str, str]:
+    """Identifies knowledge gaps and generates a follow-up query.
+
+    Analyzes the current summary to identify areas for further research and generates
+    a new search query to address those gaps. Uses structured output to extract the
+    follow-up query in JSON format.
+
+    Args:
+        state: Current graph state containing the running summary and research topic.
+        config: Configuration for the runnable, including LLM provider settings.
+
+    Returns:
+        Dictionary with state update, including search_query key containing the
+        generated follow-up query.
+    """
+
+    llm_json_mode = ChatOpenAI(
+        model=config.llm_model,
+        temperature=0.0,
+        model_kwargs={"response_format": {"type": "json_object"}},
+    )
+
+    result = llm_json_mode.invoke(
+        [
+            SystemMessage(
+                content=reflection_instructions.format(
+                    research_topic=state.research_topic
+                )
+            ),
+            HumanMessage(
+                content=(
+                    f"Reflect on our existing knowledge:\n === \n"
+                    f"{state.running_summary}, \n === \n And now identify a knowledge"
+                    " gap and generate a follow-up web search query:"
+                )
+            ),
+        ]
+    )
+
+    try:
+        reflection_content = json.loads(result.content)
+        query = reflection_content.get("follow_up_query")
+        if not query:
+            return {"search_query": f"Tell me more about {state.research_topic}"}
+        return {"search_query": query}
+    except (json.JSONDecodeError, KeyError, AttributeError):
+        # If parsing fails or the key is not found, use a fallback query
+        return {"search_query": f"Tell me more about {state.research_topic}"}
