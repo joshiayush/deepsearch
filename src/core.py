@@ -1,5 +1,5 @@
 import json
-from typing import Dict
+from typing import Dict, Literal
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -228,3 +228,55 @@ def reflect_on_summary(state: SummaryState, config: Configuration) -> Dict[str, 
     except (json.JSONDecodeError, KeyError, AttributeError):
         # If parsing fails or the key is not found, use a fallback query
         return {"search_query": f"Tell me more about {state.research_topic}"}
+
+
+def finalize_summary(state: SummaryState) -> Dict[str, str]:
+    """Finalizes the research summary.
+
+    This function deduplicates and formats the sources gathered during the research
+    process, then combines them with the running summary to create a well-structured
+    research report with proper citations.
+
+    Args:
+        state: Current graph state containing the running summary and sources gathered.
+
+    Returns:
+        Dictionary with state update, including running_summary key containing the
+        formatted final summary with sources.
+    """
+    seen_sources = set()
+    unique_sources = []
+
+    for source in state.sources_gathered:
+        for line in source.split("\n"):
+            if line.strip() and line not in seen_sources:
+                seen_sources.add(line)
+                unique_sources.append(line)
+
+    all_sources = "\n".join(unique_sources)
+    state.running_summary = (
+        f"## Summary\n{state.running_summary}\n\n ### Sources:\n{all_sources}"
+    )
+    return {"running_summary": state.running_summary}
+
+
+def route_research(
+    state: SummaryState, config: Configuration
+) -> Literal["finalize_summary", "web_research"]:
+    """Routing function that determines the next step in the research flow.
+
+    Controls the research loop by deciding whether to continue gathering information
+    or to finalize the summary based on the configured maximum number of research loops.
+
+    Args:
+        state: Current graph state containing the research loop count.
+        config: Configuration, including max_web_research_loops setting.
+
+    Returns:
+        String literal indicating the next node to visit
+        ("web_research" or "finalize_summary").
+    """
+    if state.research_loop_count <= config.max_web_research_loops:
+        return "web_research"
+    else:
+        return "finalize_summary"
