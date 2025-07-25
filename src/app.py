@@ -1,6 +1,15 @@
 import os
 from dotenv import load_dotenv
 
+import streamlit as st
+from PyPDF2 import PdfReader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
+from langchain.llms import OpenAI
+from langchain.chains.question_answering import load_qa_chain
+
 from state import SummaryState
 from core import (
     generate_query,
@@ -13,33 +22,110 @@ from configuration import Configuration
 
 load_dotenv()
 
-if __name__ == "__main__":
-    config = Configuration()
-    research_topic = "Artificial Intelligence in Healthcare"
-    state = SummaryState(research_topic=research_topic)
-    query_result = generate_query(state, config)
-    print(f"Generated Search Query: {query_result['search_query']}")
+st.set_page_config(page_title="Deepsearch", layout="wide")
+st.title("Deepsearch: AI-Powered Research Assistant")
 
-    for _ in range(config.max_web_research_loops):
-        state.search_query = query_result["search_query"]
-        print(f"Current Search Query: {state.search_query}")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-        state.research_loop_count = int(os.getenv("MAX_WEB_RESEARCH_LOOPS", 3))
-        web_research_result = web_research(state, config)
+if "vectorstore" not in st.session_state:
+    st.session_state.vectorstore = None
 
-        state.web_research_results.extend(web_research_result["web_research_results"])
-        state.sources_gathered.extend(web_research_result["sources_gathered"])
-        state.research_loop_count = web_research_result["research_loop_count"]
+with st.sidebar:
+    st.subheader("🔐 API & Document Setup")
+    openai_api_key = st.text_input("Enter your OpenAI API Key", type="password")
 
-        summary_result = summarize_sources(state, config)
-        state.running_summary = summary_result["running_summary"]
+    uploaded_files = st.file_uploader(
+        "Upload PDF files", type="pdf", accept_multiple_files=True
+    )
+    if st.button("📥 Process PDFs") and uploaded_files and openai_api_key:
+        raw_text = ""
+        for pdf in uploaded_files:
+            reader = PdfReader(pdf)
+            for page in reader.pages:
+                raw_text += page.extract_text() or ""
 
-        # Reflect on the summary to generate a follow-up query
-        reflection_result = reflect_on_summary(state, config)
-        print(f"Follow-up Search Query: {reflection_result['search_query']}")
-        state.search_query = reflection_result["search_query"]
+        splitter = CharacterTextSplitter(
+            separator="\n", chunk_size=1000, chunk_overlap=200
+        )
+        chunks = splitter.split_text(raw_text)
 
-    finalized_result = finalize_summary(state)
-    state.running_summary = finalized_result["running_summary"]
-    # Final output
-    print(f"Final Summary: {state.running_summary}")
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+        vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
+
+        st.session_state.vectorstore = vectorstore
+        st.success("✅ PDFs processed successfully.")
+
+
+with st.sidebar.expander("⚙️ Mode Selection", expanded=False):
+    deepthinking = st.checkbox("DeepThinking", value=True, key="deepthinking_mode")
+    if uploaded_files:
+        st.checkbox("Search Mode", value=False, disabled=True, key="search_mode")
+        st.info("Search mode is disabled when PDFs are uploaded.")
+    else:
+        st.checkbox("Search Mode", value=True, key="search_mode")
+
+
+if "config" not in st.session_state:
+    st.session_state.config = Configuration().dict()
+
+with st.sidebar.expander("⚙️ Configuration", expanded=False):
+    st.markdown("Customize the research assistant's behavior.")
+
+    st.session_state.config["max_web_research_loops"] = st.number_input(
+        label="🔁 Research Depth",
+        min_value=1,
+        max_value=10,
+        value=st.session_state.config["max_web_research_loops"],
+        help="Number of research iterations to perform.",
+    )
+    st.session_state.config["llm_model"] = st.selectbox(
+        label="🧠 LLM Model",
+        options=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+        index=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"].index(
+            st.session_state.config["llm_model"]
+        ),
+        help="Choose the language model to use.",
+    )
+    st.session_state.config["search_api"] = st.selectbox(
+        label="🔍 Search API",
+        options=["perplexity", "tavily", "duckduckgo", "searxng"],
+        index=["perplexity", "tavily", "duckduckgo", "searxng"].index(
+            st.session_state.config["search_api"]
+        ),
+        help="Choose the web search engine.",
+    )
+    st.session_state.config["fetch_full_page"] = st.checkbox(
+        label="📰 Fetch Full Page Content",
+        value=st.session_state.config["fetch_full_page"],
+        help="Whether to retrieve full web page content.",
+    )
+    st.session_state.config["strip_thinking_tokens"] = st.checkbox(
+        label="✂️ Strip <think> Tokens",
+        value=st.session_state.config["strip_thinking_tokens"],
+        help="Removes <think> tags from LLM output.",
+    )
+
+
+query = st.text_input("💬 Ask a question...")
+if query and openai_api_key:
+    responses = []
+
+    if deepthinking:
+        if not st.session_state.vectorstore:
+            st.error("❌ PDFs are not processed yet.")
+        else:
+            docs = st.session_state.vectorstore.similarity_search(query)
+            llm = OpenAI(temperature=0, openai_api_key=openai_api_key)
+            chain = load_qa_chain(llm, chain_type="stuff")
+            answer = chain.run(input_documents=docs, question=query)
+            responses.append(("📄 DeepThinking", answer))
+
+    if st.session_state.get("search"):
+        llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
+        search_response = llm.predict(query)
+        responses.append(("🌐 Search", search_response))
+
+    st.session_state.chat_history.append(("🧑 You", query))
+    for source, resp in responses:
+        st.session_state.chat_history.append((source, resp))
