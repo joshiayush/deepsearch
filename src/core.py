@@ -142,24 +142,29 @@ def summarize_sources(state: SummaryState, config: Configuration) -> Dict[str, s
         config: Configuration for the runnable, including LLM provider settings.
 
     Returns:
-        Dictionary with state update, including running_summary key containing the
+        Dictionary with state update, including running_answer key containing the
         updated summary.
     """
-    existing_summary = state.running_summary
+    existing_answer = state.running_answer
     most_recent_web_research = state.web_research_results[-1]
 
-    if existing_summary:
+    if existing_answer:
         human_message_content = (
-            f"<Existing Summary>\n{existing_summary}\n<Existing Summary>\n\n"
-            f"<New Context>\n{most_recent_web_research}\n<New Context>"
-            f"Update the Existing Summary with the New Context on this topic:\n"
-            f"<User Input>\n{state.research_topic}\n<User Input>\n\n"
+            f"<Existing Answer>\n{existing_answer}\n</Existing Answer>\n\n"
+            f"<Recent Web Search Results>\n{most_recent_web_research}\n</Recent Web Search Results>\n\n"
+            f"Your task is to critically enhance and update the Existing Answer using"
+            f" only the information from the Recent Web Search Results. Ensure"
+            f" accuracy, correct outdated points, and expand on missing aspects based"
+            f" on the new context.\n\n"
+            f"<Research Topic>\n{state.research_topic}\n</Research Topic>\n\n"
         )
     else:
         human_message_content = (
-            f"<Context>\n{most_recent_web_research}\n<Context>"
-            f"Create a Summary using the Context on this topic:\n"
-            f"<User Input>\n{state.research_topic}\n<User Input>\n\n"
+            f"<Recent Web Search Results>\n{most_recent_web_research}\n</Recent Web Search Results>\n\n"
+            f"Your task is to generate a detailed, well-researched response using only"
+            f" the information from the Recent Web Search Results. Ensure your answer"
+            f" covers key insights, current developments, and notable perspectives.\n\n"
+            f"<Research Topic>\n{state.research_topic}\n</Research Topic>\n\n"
         )
 
     llm = ChatOpenAI(
@@ -173,14 +178,14 @@ def summarize_sources(state: SummaryState, config: Configuration) -> Dict[str, s
             HumanMessage(content=human_message_content),
         ]
     )
-    running_summary = result.content
+    running_answer = result.content
     if config.strip_thinking_tokens:
-        running_summary = strip_thinking_tokens(running_summary)
+        running_answer = strip_thinking_tokens(running_answer)
 
-    return {"running_summary": running_summary}
+    return {"running_answer": running_answer}
 
 
-def reflect_on_summary(state: SummaryState, config: Configuration) -> Dict[str, str]:
+def reflect_on_answer(state: SummaryState, config: Configuration) -> Dict[str, str]:
     """Identifies knowledge gaps and generates a follow-up query.
 
     Analyzes the current summary to identify areas for further research and generates
@@ -212,7 +217,7 @@ def reflect_on_summary(state: SummaryState, config: Configuration) -> Dict[str, 
             HumanMessage(
                 content=(
                     f"Reflect on our existing knowledge:\n === \n"
-                    f"{state.running_summary}, \n === \n And now identify a knowledge"
+                    f"{state.running_answer}, \n === \n And now identify a knowledge"
                     " gap and generate a follow-up web search query:"
                 )
             ),
@@ -241,7 +246,7 @@ def finalize_summary(state: SummaryState) -> Dict[str, str]:
         state: Current graph state containing the running summary and sources gathered.
 
     Returns:
-        Dictionary with state update, including running_summary key containing the
+        Dictionary with state update, including running_answer key containing the
         formatted final summary with sources.
     """
     seen_sources = set()
@@ -254,10 +259,8 @@ def finalize_summary(state: SummaryState) -> Dict[str, str]:
                 unique_sources.append(line)
 
     all_sources = "\n".join(unique_sources)
-    state.running_summary = (
-        f"## Summary\n{state.running_summary}\n\n ### Sources:\n{all_sources}"
-    )
-    return {"running_summary": state.running_summary}
+    state.running_answer = f"{state.running_answer}\n\n### Sources:\n{all_sources}"
+    return {"running_answer": state.running_answer}
 
 
 def route_research(

@@ -15,8 +15,9 @@ from core import (
     generate_query,
     web_research,
     summarize_sources,
-    reflect_on_summary,
+    reflect_on_answer,
     finalize_summary,
+    route_research,
 )
 from configuration import Configuration
 
@@ -58,7 +59,7 @@ with st.sidebar:
 
 
 with st.sidebar.expander("⚙️ Mode Selection", expanded=False):
-    deepthinking = st.checkbox("DeepThinking", value=True, key="deepthinking_mode")
+    st.checkbox("DeepThinking", value=True, key="deepthinking_mode")
     if uploaded_files:
         st.checkbox("Search Mode", value=False, disabled=True, key="search_mode")
         st.info("Search mode is disabled when PDFs are uploaded.")
@@ -111,20 +112,38 @@ query = st.text_input("💬 Ask a question...")
 if query and openai_api_key:
     responses = []
 
-    if deepthinking:
-        if not st.session_state.vectorstore:
-            st.error("❌ PDFs are not processed yet.")
-        else:
-            docs = st.session_state.vectorstore.similarity_search(query)
-            llm = OpenAI(temperature=0, openai_api_key=openai_api_key)
-            chain = load_qa_chain(llm, chain_type="stuff")
-            answer = chain.run(input_documents=docs, question=query)
-            responses.append(("📄 DeepThinking", answer))
+    if st.session_state.deepthinking_mode and st.session_state.search_mode:
+        config = Configuration(**st.session_state.config)
+        state = SummaryState(
+            research_topic=query,
+            search_query=query,
+            web_research_results=[],
+            sources_gathered=[],
+            research_loop_count=0,
+            running_answer=None,
+        )
 
-    if st.session_state.get("search"):
-        llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
-        search_response = llm.predict(query)
-        responses.append(("🌐 Search", search_response))
+        while route_research(state, config) == "web_research":
+            query = generate_query(state, config)
+            state.search_query = query["search_query"]
+
+            web_results = web_research(state, config)
+            state.web_research_results.extend(web_results["web_research_results"])
+            state.sources_gathered.extend(web_results["sources_gathered"])
+            state.research_loop_count = web_results["research_loop_count"]
+
+            summarize_result = summarize_sources(state, config)
+            state.running_answer = summarize_result["running_answer"]
+
+            reflect_result = reflect_on_answer(state, config)
+            state.search_query = reflect_result["search_query"]
+
+        finalize_summary = finalize_summary(state)
+        state.running_answer = finalize_summary["running_answer"]
+
+        st.markdown(state.running_answer)
+        st.session_state.chat_history.append(("🤖 DeepThinking", state.running_answer))
+        responses.append(("🤖 DeepThinking", state.running_answer))
 
     st.session_state.chat_history.append(("🧑 You", query))
     for source, resp in responses:

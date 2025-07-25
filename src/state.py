@@ -10,7 +10,7 @@ class SummaryState:
     web_research_results: Annotated[list, operator.add] = field(default_factory=list)
     sources_gathered: Annotated[list, operator.add] = field(default_factory=list)
     research_loop_count: int = field(default=0)  # Research loop count
-    running_summary: str = field(default=None)  # Final report
+    running_answer: str = field(default=None)  # Final report
 
 
 @dataclass(kw_only=True)
