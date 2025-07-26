@@ -1,27 +1,26 @@
-import os
+from typing import List
 from dotenv import load_dotenv
 
 import streamlit as st
-from PyPDF2 import PdfReader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import OpenAI
-from langchain.chains.question_answering import load_qa_chain
+from unstructured.documents.elements import CompositeElement
 
 from state import SummaryState
 from core import (
+    text_tables_and_images_b64_summarizer,
+    create_multi_vector_retriever,
     generate_query,
     web_research,
     summarize_sources,
     reflect_on_answer,
     finalize_summary,
     route_research,
+    finalize_pdf_summary,
 )
 from configuration import Configuration
+from utils import get_parted_chunks, separate_text_tables_and_images_b64_chunks
 
 load_dotenv()
+
 
 st.set_page_config(page_title="Deepsearch", layout="wide")
 st.title("Deepsearch: AI-Powered Research Assistant")
@@ -30,6 +29,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 if "vectorstore" not in st.session_state:
+    st.session_state.retriever = None
     st.session_state.vectorstore = None
 
 with st.sidebar:
@@ -40,21 +40,34 @@ with st.sidebar:
         "Upload PDF files", type="pdf", accept_multiple_files=True
     )
     if st.button("📥 Process PDFs") and uploaded_files and openai_api_key:
-        raw_text = ""
+        all_chunks = []
         for pdf in uploaded_files:
-            reader = PdfReader(pdf)
-            for page in reader.pages:
-                raw_text += page.extract_text() or ""
+            try:
+                chunks = get_parted_chunks(pdf)
+                all_chunks.extend(chunks)
+            except Exception as e:
+                st.error(f"❌ Failed to process {pdf.name}: {str(e)}")
 
-        splitter = CharacterTextSplitter(
-            separator="\n", chunk_size=1000, chunk_overlap=200
+        text, tables, images_b64 = separate_text_tables_and_images_b64_chunks(
+            all_chunks
         )
-        chunks = splitter.split_text(raw_text)
-
-        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-        vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
-
-        st.session_state.vectorstore = vectorstore
+        text_summaries, table_summaries, images_b64_summaries = (
+            text_tables_and_images_b64_summarizer(
+                text_chunks=text,
+                table_chunks=tables,
+                image_b64_chunks=images_b64,
+            )
+        )
+        retriever = create_multi_vector_retriever(
+            text,
+            text_summaries,
+            tables,
+            table_summaries,
+            images_b64,
+            images_b64_summaries,
+        )
+        st.session_state.retriever = retriever
+        st.session_state.vectorstore = retriever.vectorstore
         st.success("✅ PDFs processed successfully.")
 
 
@@ -112,7 +125,60 @@ query = st.text_input("💬 Ask a question...")
 if query and openai_api_key:
     responses = []
 
-    if st.session_state.deepthinking_mode and st.session_state.search_mode:
+    if (
+        st.session_state.deepthinking_mode
+        and st.session_state.retriever
+        and st.session_state.vectorstore
+    ):
+        retriever = st.session_state.retriever
+        config = Configuration(**st.session_state.config)
+        state = SummaryState(
+            research_topic=query,
+            search_query=query,
+            web_research_results=[],
+            sources_gathered=[],
+            research_loop_count=0,
+            running_answer=None,
+        )
+
+        def running_answer_from_chunks(chunks: List[CompositeElement]) -> str:
+            running_answer = ""
+            for chunk in chunks:
+                if isinstance(chunk, CompositeElement):
+                    running_answer += chunk.text
+                    running_answer += "\n\n"
+            running_answer = running_answer.strip()
+
+        running_answer = ""
+        chunks = retriever.invoke(query)
+        running_answer = running_answer_from_chunks(chunks)
+
+        while route_research(state, config) == "web_research":
+            query = generate_query(state, config)
+            state.search_query = query["search_query"]
+
+            chunks = retriever.invoke(state.search_query)
+            state.running_elements = chunks
+            running_answer = running_answer_from_chunks(chunks)
+            state.web_research_results.extend([running_answer])
+            state.research_loop_count += 1
+
+            summarize_result = summarize_sources(state, config)
+            state.running_answer = summarize_result["running_answer"]
+
+            reflect_result = reflect_on_answer(state, config)
+            state.search_query = reflect_result["search_query"]
+
+        result = finalize_pdf_summary(state)
+        for block in result["content"]:
+            if block:
+                st.markdown(block)
+            else:
+                st.image(result["images"].pop(0), use_container_width=False)
+
+        st.session_state.chat_history.append(("🤖 DeepThinking", state.running_answer))
+        responses.append(("🤖 DeepThinking", state.running_answer))
+    elif st.session_state.deepthinking_mode and st.session_state.search_mode:
         config = Configuration(**st.session_state.config)
         state = SummaryState(
             research_topic=query,
