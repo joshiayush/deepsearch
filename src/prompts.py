@@ -6,6 +6,23 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
+text_tables_summarizer_instructions = """You are an assistant tasked with summarizing
+tables and text.
+
+<GOAL>
+Give a concise summary of the provided text and tables.
+</GOAL>
+
+<FORMATTING>
+- Respond only with the summary, no additionnal comment.
+- Do not start your message by saying "Here is a summary" or anything like that.
+- Just give the summary as it is.
+</FORMATTING>
+
+Table or text chunk: {element}
+"""
+
+
 query_writer_instructions = """Your goal is to generate a targeted web search query.
 
 <CONTEXT>
@@ -54,9 +71,9 @@ When EXTENDING an existing summary:
 5. Verify that your final output differs from the input summary.                                                                                                                                                            
 < /REQUIREMENTS >
 
-< FORMATTING >
+<FORMATTING>
 - Start directly with the updated summary, without preamble or titles. Do not use XML tags in the output.  
-< /FORMATTING >
+</FORMATTING>
 
 <Task>
 Think carefully about the provided Context first. Then generate a summary of the context to address the User Input.

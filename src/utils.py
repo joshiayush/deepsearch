@@ -1,14 +1,74 @@
 import os
 import httpx
 import requests
-from typing import Dict, Any, List, Union, Optional
+import tempfile
+from typing import Dict, Any, List, Tuple, Union, Optional
 
+from unstructured.partition.pdf import partition_pdf
+from unstructured.documents.elements import Element
 from markdownify import markdownify
 from langsmith import traceable
 from tavily import TavilyClient
 from duckduckgo_search import DDGS
-
 from langchain_community.utilities import SearxSearchWrapper
+
+
+def separate_text_tables_and_images_b64_chunks(
+    chunks: List[Element],
+) -> Tuple[List[Element], List[Element], List[Element]]:
+    """Separate text, tables, and images from a list of unstructured elements.
+
+    Args:
+        chunks (List[Element]): List of unstructured elements to separate.
+
+    Returns:
+        Tuple[List[Element], List[Element], List[Element]]: Three lists containing
+            text elements, table elements, and image elements respectively.
+    """
+    text_elements = []
+    table_elements = []
+    images_b64 = []
+
+    for chunk in chunks:
+        if "Table" in str(type(chunk)):
+            table_elements.append(chunk)
+
+        if "CompositeElement" in str(type((chunk))):
+            text_elements.append(chunk)
+
+    for chunk in chunks:
+        if "CompositeElement" in str(type(chunk)):
+            chunk_els = chunk.metadata.orig_elements
+            for el in chunk_els:
+                if "Image" in str(type(el)):
+                    images_b64.append(el.metadata.image_base64)
+
+    return text_elements, table_elements, images_b64
+
+
+def get_parted_chunks(pdf) -> List[Element]:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(pdf.read())
+        tmp_file.flush()
+        tmp_file_path = tmp_file.name
+
+    if not os.path.exists(tmp_file_path):
+        raise FileNotFoundError(f"Temp file not found at: {tmp_file_path}")
+
+    try:
+        return partition_pdf(
+            filename=tmp_file_path,
+            strategy="hi_res",
+            infer_table_structure=True,
+            extract_image_block_types=["Image"],
+            extract_image_block_to_payload=True,
+            chunking_strategy="by_title",
+            max_characters=10000,
+            combine_text_under_n_chars=2000,
+            new_after_n_chars=6000,
+        )
+    finally:
+        os.remove(tmp_file_path)
 
 
 def get_config_value(value: Any) -> str:
