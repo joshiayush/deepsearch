@@ -1,8 +1,10 @@
-# Deep Researcher
+# DeepSearch
 
-Deep Researcher is a fully local web research assistant that uses any LLM hosted by [Ollama](https://ollama.com/search). Give it a topic and it will generate a web search query, gather web search results, summarize the results of web search, reflect on the summary to examine knowledge gaps, generate a new search query to address the gaps, and repeat for a user-defined number of cycles. It will provide the user a final markdown summary with all sources used to generate the summary.
+Deepsearch is a research assistant that is built on top of [langchain-ai/local-deep-researcher](https://github.com/langchain-ai/local-deep-researcher). While having the web search ability, now it also has the ability to search through your local documents (PDF). Give it a topic and it will generate a search query, gather search results, create a brief of the search results, reflect on the answer to examine knowledge gaps, generate a new search query to address the gaps, and repeat for a user-defined number of cycles. It will provide the user a final markdown with the relevant images found during the search.
 
-![ollama-deep-research](https://github.com/user-attachments/assets/1c6b28f8-6b64-42ba-a491-1ab2875d50ea)
+<img width="1470" height="956" alt="Screenshot 2025-07-27 at 4 29 20 PM" src="https://github.com/user-attachments/assets/f30de842-a26f-4e7b-8e0c-9185c1aff467" />
+
+**Note:** When PDF files are uploaded the "search" mode is disabled automatically.
 
 ## 🚀 Quickstart
 
@@ -12,27 +14,9 @@ git clone https://github.com/joshiayush/deepsearch.git
 cd deepsearch
 ```
 
-Then edit the `.env` file to customize the environment variables according to your needs. These environment variables control the model selection, search tools, and other configuration settings. When you run the application, these values will be automatically loaded via `python-dotenv` (because `langgraph.json` point to the "env" file).
+Then edit the `.env` file to customize the environment variables according to your needs. These environment variables control the search tools, and other configuration settings. When you run the application, these values will be automatically loaded via `python-dotenv`.
 ```shell
 cp .env.example .env
-```
-
-### Selecting local model with Ollama
-
-1. Download the Ollama app for Mac [here](https://ollama.com/download).
-
-2. Pull a local LLM from [Ollama](https://ollama.com/search). As an [example](https://ollama.com/library/deepseek-r1:8b):
-```shell
-ollama pull deepseek-r1:8b
-```
-
-3. Optionally, update the `.env` file with the following Ollama configuration settings. 
-
-* If set, these values will take precedence over the defaults set in the `Configuration` class in `configuration.py`. 
-```shell
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL="http://localhost:11434" # Ollama service endpoint, defaults to `http://localhost:11434` 
-LOCAL_LLM=model # the model to use, defaults to `llama3.2` if not set
 ```
 
 ### Selecting search tool
@@ -46,7 +30,7 @@ MAX_WEB_RESEARCH_LOOPS=xxx # the maximum number of research loop steps, defaults
 FETCH_FULL_PAGE=xxx # fetch the full page content (with `duckduckgo`), defaults to `false`
 ```
 
-### Running with LangGraph Studio
+### Running with Streamlit
 
 #### Mac
 
@@ -56,33 +40,36 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-2. Launch LangGraph server:
+2. Install dependencies:
 
 ```bash
-# Install uv package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uvx --refresh --from "langgraph-cli[inmem]" --with-editable . --python 3.11 langgraph dev
+brew install poppler tesseract libmagic
+pip install -r requirements.txt
 ```
 
-#### Windows
+3. Launch streamlit:
 
-1. (Recommended) Create a virtual environment: 
+```bash
+streamlit run src/app.py
+```
 
-* Install `Python 3.11` (and add to PATH during installation). 
-* Restart your terminal to ensure Python is available, then create and activate a virtual environment:
+#### Linux
 
-```powershell
+1. (Recommended) Create a virtual environment:
+```bash
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 ```
 
-2. Launch LangGraph server:
+2. Install dependencies:
 
-```powershell
-# Install dependencies
-pip install -e .
-pip install -U "langgraph-cli[inmem]"            
+```bash
+apt-get install poppler-utils tesseract-ocr libmagic-dev
+pip install -r requirements.txt
+```
 
-# Start the LangGraph server
-langgraph dev
+3. Launch streamlit:
+
+```bash
+streamlit run src/app.py
 ```
