@@ -33,7 +33,7 @@ if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
 
 with st.sidebar:
-    st.subheader("🔐 API & Document Setup")
+    st.subheader("API & Document Setup")
     openai_api_key = st.text_input("Enter your OpenAI API Key", type="password")
 
     uploaded_files = st.file_uploader(
@@ -169,13 +169,18 @@ if query and openai_api_key:
             reflect_result = reflect_on_answer(state, config)
             state.search_query = reflect_result["search_query"]
 
-        result = finalize_pdf_summary(state)
-        for block in result["content"]:
-            if block:
-                st.markdown(block)
-            else:
-                st.image(result["images"].pop(0), use_container_width=False)
+        finalize_summary = finalize_summary(state)
+        state.running_answer = finalize_summary["running_answer"]
 
+        result = finalize_pdf_summary(state)
+        images = result["images"]
+        cols_per_row = 3
+        for i in range(0, len(images), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j in range(cols_per_row):
+                if i + j < len(images):
+                    cols[j].image(images[i + j])
+        st.markdown(state.running_answer)
         st.session_state.chat_history.append(("🤖 DeepThinking", state.running_answer))
         responses.append(("🤖 DeepThinking", state.running_answer))
     elif st.session_state.deepthinking_mode and st.session_state.search_mode:

@@ -386,7 +386,10 @@ def finalize_summary(state: SummaryState) -> Dict[str, str]:
                 unique_sources.append(line)
 
     all_sources = "\n".join(unique_sources)
-    state.running_answer = f"{state.running_answer}\n\n### Sources:\n{all_sources}"
+    if all_sources:
+        state.running_answer = f"{state.running_answer}\n\n### Sources:\n{all_sources}"
+    else:
+        state.running_answer = f"{state.running_answer}"
     return {"running_answer": state.running_answer}
 
 
